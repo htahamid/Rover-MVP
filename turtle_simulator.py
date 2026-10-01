@@ -7,18 +7,30 @@ class TurtleSimulator:
 
     def __init__(self):
 
-        # Create simulator window
+        # -----------------------------------
+        # WINDOW
+        # -----------------------------------
+
         self.screen = turtle.Screen()
         self.screen.title("Rover Simulator")
-        self.screen.setup(width=800, height=600)
 
-        # Manually update the screen
+        self.screen.setup(
+            width=800,
+            height=600
+        )
+
+        self.screen.bgcolor("white")
+
+        # We manually refresh the screen
         self.screen.tracer(0)
 
-        # CREATE CUSTOM ROVER SHAPE
+        # -----------------------------------
+        # CREATE ROVER SHAPE
+        # -----------------------------------
+
         rover_shape = turtle.Shape("compound")
 
-        # Main rover body
+        # Main body
         body = (
             (-30, -20),
             (25, -20),
@@ -34,7 +46,7 @@ class TurtleSimulator:
             "black"
         )
 
-        # Front / nose section
+        # Front nose
         nose = (
             (20, -12),
             (38, -7),
@@ -104,8 +116,7 @@ class TurtleSimulator:
             "black"
         )
 
-        # Small front marker so we can easily
-        # tell which direction the rover is facing
+        # Front direction marker
         front_marker = (
             (26, -5),
             (34, 0),
@@ -118,141 +129,170 @@ class TurtleSimulator:
             "black"
         )
 
-        # Register the finished compound shape
         self.screen.register_shape(
             "rover",
             rover_shape
         )
 
-        # -------------------------------------------------
+        # -----------------------------------
         # CREATE ROVER
-        # -------------------------------------------------
+        # -----------------------------------
 
         self.rover = turtle.Turtle()
+
         self.rover.shape("rover")
-
         self.rover.penup()
+        self.rover.tiltangle(90)
+        
+        # -----------------------------------
+        # ROVER POSITION
+        # -----------------------------------
 
-        # -------------------------------------------------
-        # MOTOR VALUES
-        # -------------------------------------------------
-
-        self.left_speed = 0
-        self.right_speed = 0
-
-        # Rover position
         self.x = 0
         self.y = 0
 
-        # Direction in radians
-        self.angle = 0
+        # Angle is stored in radians
+        self.angle = math.radians(90)
 
-        # Distance between simulated left
-        # and right wheels
+        # Distance between left and
+        # right wheels
         self.wheel_base = 70
 
-        # Converts motor power into
-        # movement speed
-        self.speed_scale = 0.8
+        # How far one simulated motor
+        # step moves a wheel
+        self.distance_per_step = 0.5
 
-        # Draw rover immediately
+        # How quickly steps are animated
+        self.step_delay = 0.005
+
         self.update_rover_graphics()
+
         self.screen.update()
 
-    # LEFT WHEEL
+    # -----------------------------------
+    # STEPPER MOTOR COMMAND
+    # -----------------------------------
 
-    def set_left_wheel(self, speed):
+    def step(
+        self,
+        left_steps,
+        right_steps
+    ):
 
-        self.left_speed = max(
-            -100,
-            min(100, speed)
+        left_steps = int(left_steps)
+        right_steps = int(right_steps)
+
+        total_cycles = max(
+            abs(left_steps),
+            abs(right_steps)
         )
 
-    # RIGHT WHEEL
+        if total_cycles == 0:
+            return
 
-    def set_right_wheel(self, speed):
+        left_counter = 0
+        right_counter = 0
 
-        self.right_speed = max(
-            -100,
-            min(100, speed)
-        )
+        for _ in range(total_cycles):
 
-    # WAIT
+            left_distance = 0
+            right_distance = 0
 
-    def wait(self, seconds):
+            # --------------------------------
+            # LEFT STEPPER MOTOR
+            # --------------------------------
 
-        end_time = time.perf_counter() + seconds
-        previous_time = time.perf_counter()
+            left_counter += abs(left_steps)
 
-        while time.perf_counter() < end_time:
+            if left_counter >= total_cycles:
 
-            current_time = time.perf_counter()
+                left_counter -= total_cycles
 
-            delta_time = (
-                current_time
-                - previous_time
+                if left_steps > 0:
+                    left_distance = (
+                        self.distance_per_step
+                    )
+
+                elif left_steps < 0:
+                    left_distance = (
+                        -self.distance_per_step
+                    )
+
+            # --------------------------------
+            # RIGHT STEPPER MOTOR
+            # --------------------------------
+
+            right_counter += abs(right_steps)
+
+            if right_counter >= total_cycles:
+
+                right_counter -= total_cycles
+
+                if right_steps > 0:
+                    right_distance = (
+                        self.distance_per_step
+                    )
+
+                elif right_steps < 0:
+                    right_distance = (
+                        -self.distance_per_step
+                    )
+
+            # Move rover based on what
+            # each motor did
+            self.move_wheels(
+                left_distance,
+                right_distance
             )
-
-            previous_time = current_time
-
-            self.update(delta_time)
 
             self.screen.update()
 
-            # Around 60 updates per second
-            time.sleep(0.016)
+            time.sleep(
+                self.step_delay
+            )
 
-    # UPDATE MOVEMENT
+    # -----------------------------------
+    # DIFFERENTIAL DRIVE MOVEMENT
+    # -----------------------------------
 
-    def update(self, delta_time):
+    def move_wheels(
+        self,
+        left_distance,
+        right_distance
+    ):
 
-        left_velocity = (
-            self.left_speed
-            * self.speed_scale
-        )
-
-        right_velocity = (
-            self.right_speed
-            * self.speed_scale
-        )
-
-        # Average wheel speed controls
-        # forward/backward movement
-        velocity = (
-            left_velocity
-            + right_velocity
+        # Average movement determines
+        # forward/backward distance
+        distance = (
+            left_distance
+            + right_distance
         ) / 2
 
-        # Difference between wheel speeds
-        # controls turning
-        angular_velocity = (
-            right_velocity
-            - left_velocity
+        # Difference determines rotation
+        angle_change = (
+            right_distance
+            - left_distance
         ) / self.wheel_base
 
-        # Update direction
-        self.angle += (
-            angular_velocity
-            * delta_time
-        )
+        self.angle += angle_change
 
-        # Update X position
+        # Calculate new X position
         self.x += (
             math.cos(self.angle)
-            * velocity
-            * delta_time
+            * distance
         )
 
-        # Update Y position
+        # Calculate new Y position
         self.y += (
             math.sin(self.angle)
-            * velocity
-            * delta_time
+            * distance
         )
 
         self.update_rover_graphics()
 
-    # UPDATE GRAPHICS
+    # -----------------------------------
+    # UPDATE TURTLE
+    # -----------------------------------
 
     def update_rover_graphics(self):
 
